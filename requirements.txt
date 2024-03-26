@@ -1,0 +1,8 @@
+azure-cognitiveservices-speech
+openai
+opencv-python==4.9.0.80
+jieba==0.42.1
+grpcio==1.60.0
+protobuf==3.17.0
+numpy==1.22.4
+soundfile
