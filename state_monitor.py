@@ -128,8 +128,8 @@ if __name__ == "__main__":
 
 		if chain_state.listening and not chain_state.thinking and not chain_state.speaking:
 			#TODO: Empty task only for idle status, will be removed after UE animation done.
-			empty_task = Thread(target=push_empty, args=[url, sf, instance_name] )
-			empty_task.start()
+			#empty_task = Thread(target=push_empty, args=[url, sf, instance_name] )
+			#empty_task.start()
 			print("Listeing...")
 			success, question = recognize_from_microphone()
 
