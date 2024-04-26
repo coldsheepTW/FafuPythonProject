@@ -12,11 +12,12 @@ from makeTTS import form_ssml
 from threading import Thread
 import soundfile
 import random
-from socket import *
+import socket # for TCP socket communications with Unreal Engine
 import cv2
 
 # socket settings
-HOST, PORT= "localhost", 7000
+HOST, PORT= "localhost", 9999
+
 
 # Microsoft ASR settings
 SPEECH_KEY="YOUR_SPEECH_KEY"
@@ -51,9 +52,9 @@ paras['taiwan']['penalty'] = 0.1
 
 #CV2 face detection settings
 cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+video_capture = cv2.VideoCapture(0)
 
-human_threshold = 300 #看現場遠近調整數值，用來判定人的正臉是否已足夠靠近(長+寬)
-exist_counts = 0
+human_threshold = 500 #看現場遠近調整數值，用來判定人的正臉是否已足夠靠近(長+寬)
 
 def recognize_from_microphone():
 
@@ -97,9 +98,11 @@ def get_gpt_resutls(question):
 
 class ChainState:
 	def __init__(self):
-		self.idle = True
+		#TODO: redesign these two status types again to add face recognition
+		#self.idle = True
+		#self.hasUser = False
 
-		self.listening = False
+		self.listening = True
 		self.thinking = False
 		self.speaking = False
 
@@ -107,7 +110,6 @@ class ChainState:
 if __name__ == "__main__":
 
 	chain_state = ChainState()
-	video_capture = cv2.VideoCapture(0)
 
 	#Settings of push audio data to Audio2Face
 	url = "localhost:50051"  # ADJUST
@@ -117,61 +119,24 @@ if __name__ == "__main__":
 	default_ans_audio_path = "wavs/dont_want_answer.wav"
 	thinking_audio_paths = ["wavs/think1.wav","wavs/think2.wav","wavs/think3.wav","wavs/think4.wav"]
 	
-	sockobj = socket(AF_INET, SOCK_STREAM)
-	sockobj.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-	sockobj.bind((HOST, PORT))
-	sockobj.listen(1)
-	print('server start at: %s:%s' % (HOST, PORT))
-	print('wait for connection...')
-
-	conn, addr = sockobj.accept()
-	print('connected by ' + str(addr))
 
 	while True:
-
-		# Check there are user in front or not when idle
-		if chain_state.idle:
-			ret, frame = video_capture.read()
-			gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-	
-			faces = cascade.detectMultiScale(
-				gray,
-				scaleFactor=1.1,
-				minNeighbors=5,
-				minSize=(30, 30)
-			)
-
-			face_check = False
-			for (x, y, w, h) in faces:
-				if w+h > human_threshold:
-					face_check = True
-					break
-
-			if face_check == True and exist_counts < 6:
-				exist_counts += 1
-			elif exist_counts > 0:
-				exist_counts -= 1
-
-			if exist_counts >= 3:
-				chain_state.listening = True
-				chain_state.idle = False
-				conn.send( "user true".encode() )
-			else:
-				chain_state.listening = False
-				chain_state.idle = True
-				conn.send( "user false".encode() )
-				continue
+		#TODO: Add hasUser with cv2 face detection
+		#TODO: Add socket TCP to push status to UE
+		if not chain_state.listening:
+			continue
 
 		if chain_state.listening and not chain_state.thinking and not chain_state.speaking:
+			#TODO: Empty task only for idle status, will be removed after UE animation done.
+			#empty_task = Thread(target=push_empty, args=[url, sf, instance_name] )
+			#empty_task.start()
 			print("Listeing...")
-
 			success, question = recognize_from_microphone()
 
 		if success: #Go to chatGPT3 if ASR succeeded
 			chain_state.listening = False
 			chain_state.thinking = True
 			print("Starting GPT...")
-
 			# Delay task is called to buy more time for GPT respond
 			data,sr = soundfile.read(random.choice(thinking_audio_paths), dtype="float32")
 			delay_task = Thread(target=push_track_delay, args=[url, data, sf, instance_name, chain_state] )
@@ -181,7 +146,7 @@ if __name__ == "__main__":
 			ans = text_filter(result)
 			
 			print("Starting TTS...")    
-			# default_ans_audio_path speaks:"我不想回答這個問題" if there are no text left after text_filter
+			# default_ans_audio_path speaks:"啊，我不想回答這個問題" if there are no text left after text_filter
 			data,sr = soundfile.read(default_ans_audio_path, dtype="float32")
 			if len(ans) > 0:
 				ans = form_ssml(ans)
@@ -192,7 +157,6 @@ if __name__ == "__main__":
 					print("語音合成成功")
 
 			print("Speaking...")
-			conn.send( "speaking true".encode() )
 			while chain_state.speaking:
 				time.sleep(0.2)
 
@@ -203,14 +167,9 @@ if __name__ == "__main__":
 			push_audio_track(url, data, sf, instance_name)
 
 			chain_state.speaking = False
-			chain_state.idle = True
-			conn.send( "speaking false".encode() )
+			chain_state.listening = True
 
 		else:
 			chain_state.speaking = False
-			chain_state.idle = True
+			chain_state.listening = True
 			
-
-	# When everything is done, release the capture
-	video_capture.release()
-	cv2.destroyAllWindows()

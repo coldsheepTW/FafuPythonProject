@@ -16,9 +16,9 @@ def form_ssml(s, tune_random=True):
 	p_start = "<prosody rate='{rate}'>"
 	p_end = "</prosody>"
 
+	s_ = ""
 	#較為平均分配語速放緩處
 	if tune_random:
-		s_ = ""
 		i =0
 		while i <len(s):
 			step = random.randint(7,12)
@@ -35,16 +35,18 @@ def form_ssml(s, tune_random=True):
 	#抽取關鍵詞，在關鍵詞處放緩語速
 	else:
 		words = textrank(plain_text)
-		s_ = ""
-		for w in words:
-			idx = s.find(w)
-			s_ = s[:idx]
-			s_ += p_start.format(rate=str(random.uniform(0.7, 0.8)))
-			s_ += w
-			s_ += p_end
-			s_ += s[idx+len(w):]
-		
-			s = s_
+		if len(words) == 0:
+			s_ = s
+		else:
+			for w in words:
+				idx = s.find(w)
+				s_ = s[:idx]
+				s_ += p_start.format(rate=str(random.uniform(0.7, 0.8)))
+				s_ += w
+				s_ += p_end
+				s_ += s[idx+len(w):]
+			
+				s = s_
 
 
 	pitch = -10
